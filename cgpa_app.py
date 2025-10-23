@@ -440,3 +440,4 @@ st.markdown(
 )
 
 st.caption("Tip: For relative grading projections, upload cohort totals or enter mean/std in the sidebar and recompute results.")
+st.markdown("<p style='text-align:right; color:gray; font-size:11px; margin-top:15px;'>Developed by <b> Subodh Purohit </b> with ❤️ using <b>Streamlit</b>, <b>Pandas</b>, and <b>NumPy</b>.</p>", unsafe_allow_html=True)
