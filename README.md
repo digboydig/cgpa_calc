@@ -1,5 +1,6 @@
-🎓 CGPA Calculator 
-A clean, interactive Streamlit web app to calculate course-wise grades, CGPA, and estimate required marks for pending components.
+🎓 SGPA / CGPA Calculator 
+
+A clean, interactive Streamlit web app to calculate course-wise grades, SGPA, CGPA, and estimate required marks for pending components.
 Supports both absolute and relative grading, customizable weightages, and an integrated projection tool.
 ✨ Features
 🧮 Per-course or global weightage (EC1/EC2/EC3 must sum to 100)
