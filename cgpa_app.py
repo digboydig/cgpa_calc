@@ -91,12 +91,13 @@ st.subheader("Enter marks and units per course")
 
 courses_data = []
 for i, cname in enumerate(course_names):
-    # Wrap each course in a div with the 'course-box' class for the red border
+    # This wrapper opens the red box div
     st.markdown(f'<div class="course-box">', unsafe_allow_html=True)
     st.subheader(f"📚 {cname}")
     
     col_u, col_info = st.columns([1, 2])
     with col_u:
+        # Dropdown for credit units (4 or 5)
         units = st.selectbox(f"Units for {cname}", options=[4, 5], key=f"units_{i}")
     
     if same_weights:
@@ -104,11 +105,12 @@ for i, cname in enumerate(course_names):
         st.caption(f"Weights (global): EC1={w1}%, EC2={w2}%, EC3={w3}%")
     else:
         wcols = st.columns(3)
-        w1 = wcols[0].number_input(f"{cname} EC1 weight (%)", 0.0, 100.0, 30.0, key=f"w1_{i}")
-        w2 = wcols[1].number_input(f"{cname} EC2 weight (%)", 0.0, 100.0, 30.0, key=f"w2_{i}")
-        w3 = wcols[2].number_input(f"{cname} EC3 weight (%)", 0.0, 100.0, 40.0, key=f"w3_{i}")
+        w1 = wcols[0].number_input(f"EC1 weight %", 0.0, 100.0, 30.0, key=f"w1_{i}")
+        w2 = wcols[1].number_input(f"EC2 weight %", 0.0, 100.0, 30.0, key=f"w2_{i}")
+        w3 = wcols[2].number_input(f"EC3 weight %", 0.0, 100.0, 40.0, key=f"w3_{i}")
+        # Validate that individual course weights sum to 100%
         if abs((w1 + w2 + w3) - 100.0) > 1e-6:
-            st.warning(f"Weights for {cname} should sum to 100 (currently {w1+w2+w3:.2f}).")
+            st.warning(f"Weights for {cname} must sum to 100 (currently {w1+w2+w3:.2f}).")
 
     pcols = st.columns(3)
     with pcols[0]:
@@ -121,11 +123,12 @@ for i, cname in enumerate(course_names):
         p3 = st.checkbox("EC3 pending", key=f"p3_{i}")
         ec3 = None if p3 else st.number_input(f"EC3 (0-{w3})", 0.0, float(w3), key=f"ec3_{i}")
     
+    # This closes the red box div, ensuring all fields are inside
     st.markdown('</div>', unsafe_allow_html=True)
     courses_data.append({"name": cname, "units": units, "ec1": ec1, "ec2": ec2, "ec3": ec3, "w1": w1, "w2": w2, "w3": w3})
 
 st.markdown("---")
-col_calc, col_reset, col_dl = st.columns([1,1,1])
+col_calc, col_reset, _ = st.columns([1,1,1])
 
 with col_calc: compute_pressed = st.button("Compute Results")
 with col_reset: 
@@ -134,38 +137,41 @@ with col_reset:
         st.rerun()
 
 if compute_pressed:
-    # Validate weights sum to 100 before computing
+    # Final validation before calculation
     bad = False
     for c in courses_data:
         if abs((c["w1"] + c["w2"] + c["w3"]) - 100.0) > 1e-6:
-            st.error(f"Weights for '{c['name']}' do not sum to 100. Please fix.")
+            st.error(f"Weights for '{c['name']}' do not sum to 100. Calculation halted.")
             bad = True
     if bad: st.stop()
 
     rows = []
-    total_weighted_gp = 0.0
+    total_credit_points = 0.0
     total_units_sum = 0.0
 
     for c in courses_data:
         total = total_percent_from_components(c["ec1"], c["ec2"], c["ec3"])
         gp, letter, _ = grade_point_and_letter_absolute(total)
         credit_pts = gp * c["units"]
-        total_weighted_gp += credit_pts
+        total_credit_points += credit_pts
         total_units_sum += c["units"]
 
         rows.append({
-            "Course": c["name"], "Units": c["units"], "EC1": ("" if c["ec1"] is None else f"{c['ec1']:.2f}"),
-            "EC2": ("" if c["ec2"] is None else f"{c['ec2']:.2f}"), "EC3": ("" if c["ec3"] is None else f"{c['ec3']:.2f}"),
-            "Total(%)": f"{total:.2f}", "Grade Point": gp, "Grade": letter, "Credit Points": credit_pts, "PassBool": (gp >= 4.5)
+            "Course": c["name"], "Units": c["units"], "GP": gp, "Grade": letter, 
+            "Credit Pts": credit_pts, "Total(%)": f"{total:.2f}",
+            "EC1": ("" if c["ec1"] is None else f"{c['ec1']:.2f}"),
+            "EC2": ("" if c["ec2"] is None else f"{c['ec2']:.2f}"),
+            "EC3": ("" if c["ec3"] is None else f"{c['ec3']:.2f}"),
+            "PassBool": (gp >= 4.5)
         })
 
     res_df = pd.DataFrame(rows)
     st.session_state["last_results_df"] = res_df
-    st.session_state["courses_data"] = courses_data
 
     st.subheader("📊 Credit Points Summary")
-    st.table(res_df[["Course", "Units", "Grade Point", "Credit Points"]])
+    st.table(res_df[["Course", "Units", "GP", "Credit Pts"]])
 
+    # Full Results Table (Original HTML Style)
     st.subheader("Full Results")
     html = "<table style='border-collapse:collapse;width:100%;font-size:14px'>"
     html += "<tr style='background:#f7f7f7;font-weight:bold;text-align:left;'>"
@@ -177,24 +183,17 @@ if compute_pressed:
         pass_text = f"<span style='color:{color};font-weight:600'>{'Pass' if r['PassBool'] else 'Fail'}</span>"
         html += f"<tr><td style='padding:8px;border:1px solid #eee'>{r['Course']}</td><td style='padding:8px;border:1px solid #eee;text-align:center'>{r['Units']}</td>"
         html += f"<td style='padding:8px;border:1px solid #eee'>{r['EC1']}</td><td style='padding:8px;border:1px solid #eee'>{r['EC2']}</td><td style='padding:8px;border:1px solid #eee'>{r['EC3']}</td>"
-        html += f"<td style='padding:8px;border:1px solid #eee'>{r['Total(%)']}</td><td style='padding:8px;border:1px solid #eee'>{r['Grade Point']}</td><td style='padding:8px;border:1px solid #eee'>{r['Grade']}</td>"
+        html += f"<td style='padding:8px;border:1px solid #eee'>{r['Total(%)']}</td><td style='padding:8px;border:1px solid #eee'>{r['GP']}</td><td style='padding:8px;border:1px solid #eee'>{r['Grade']}</td>"
         html += f"<td style='padding:8px;border:1px solid #eee;text-align:center'>{pass_text}</td></tr>"
     html += "</table>"
     st.markdown(html, unsafe_allow_html=True)
 
-    final_cgpa = total_weighted_gp / total_units_sum if total_units_sum > 0 else 0
+    # Weighted CGPA Display
+    final_cgpa = total_credit_points / total_units_sum if total_units_sum > 0 else 0
     cgpa_color = "green" if final_cgpa >= 5.5 else "red"
     st.markdown(f"<h4>Weighted CGPA: <span style='color:{cgpa_color}'>{final_cgpa:.2f}</span></h4>", unsafe_allow_html=True)
 
-# --- Projection and Footer as per Original ---
-st.markdown("---")
-st.header("Projection — required marks in pending components")
-if "last_results_df" in st.session_state:
-    df_p = st.session_state["last_results_df"]
-    sel_c = st.selectbox("Pick a course for projection", options=df_p["Course"].tolist())
-    target_gp = st.selectbox("Target grade point", options=[10,9,8,7,6,5,4,2], index=2)
-    # Projection logic here... (same as previous)
-    
+# Footer mapping box
 st.markdown("---")
 st.markdown(
     "<div style='border:1px solid #ddd;padding:12px;border-radius:6px;background:#fff; max-width:900px;'>"
