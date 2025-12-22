@@ -1,7 +1,8 @@
 import streamlit as st
 import pandas as pd
+import matplotlib.pyplot as plt
 
-st.set_page_config(page_title="🎓 CGPA Calculator", layout="centered")
+st.set_page_config(page_title="🎓 SGPA / CGPA Calculator", layout="centered")
 
 # -------------------------
 # Helper functions
@@ -20,163 +21,203 @@ def total_percent_from_components(m1, m2, m3):
     return (m1 or 0) + (m2 or 0) + (m3 or 0)
 
 # -------------------------
+# Session State
+# -------------------------
+if "semester_results" not in st.session_state:
+    st.session_state.semester_results = {}
+
+# -------------------------
 # Title
 # -------------------------
-st.title("🎓 CGPA Calculator")
-st.caption("Calculate weighted CGPA with credit units and per-course normalization.")
+st.title("🎓 SGPA / CGPA Calculator")
+st.caption("Semester-wise SGPA with automatic CGPA calculation")
 
 # -------------------------
 # Sidebar
 # -------------------------
 with st.sidebar:
-    st.header("Configuration")
-    num_courses = st.number_input("Number of courses", 1, 12, 4)
-
-    course_names = []
-    for i in range(num_courses):
-        name = st.text_input(f"Course {i+1} name", f"Course {i+1}", key=f"name_{i}")
-        course_names.append(name.strip() or f"Course {i+1}")
+    st.header("Semester Selection")
+    current_sem = st.selectbox(
+        "Select semester",
+        options=[1, 2, 3],
+        format_func=lambda x: f"Semester {x}"
+    )
 
     st.markdown("---")
-    calc_method = st.radio("Calculation Method", ["Direct Average", "Normalise from Class Highest"])
+    num_courses = st.number_input("Courses in this semester", 1, 12, 4)
+
+    course_names = [
+        st.text_input(
+            f"Course {i+1} name",
+            f"Course {i+1}",
+            key=f"c_{current_sem}_{i}"
+        )
+        for i in range(num_courses)
+    ]
 
     st.markdown("---")
     st.subheader("Weights")
-    same_weights = st.checkbox("Use same weights for all courses?", value=True)
+    w1 = st.number_input("EC1 (%)", 0.0, 100.0, 30.0)
+    w2 = st.number_input("EC2 (%)", 0.0, 100.0, 30.0)
+    w3 = st.number_input("EC3 (%)", 0.0, 100.0, 40.0)
 
-    if same_weights:
-        gw1 = st.number_input("EC1 weight (%)", 0.0, 100.0, 30.0)
-        gw2 = st.number_input("EC2 weight (%)", 0.0, 100.0, 30.0)
-        gw3 = st.number_input("EC3 weight (%)", 0.0, 100.0, 40.0)
-        if abs(gw1 + gw2 + gw3 - 100) > 1e-6:
-            st.error("Weights must sum to 100")
+    if abs(w1 + w2 + w3 - 100) > 1e-6:
+        st.error("Weights must sum to 100")
 
 # -------------------------
-# Main Input Area
+# Tabs (All semesters)
 # -------------------------
-st.subheader("Enter marks and units per course")
+tabs = st.tabs([f"Semester {i}" for i in range(1, 4)])
 
-courses_data = []
+for sem_idx, tab in enumerate(tabs, start=1):
+    with tab:
+        if sem_idx != current_sem:
+            st.info("Switch semester from sidebar to edit.")
+            continue
 
-for i, cname in enumerate(course_names):
-    st.markdown(f"### 📚 {cname}")
+        st.subheader(f"📚 Semester {current_sem}")
+        courses_data = []
 
-    col1, col2 = st.columns(2)
-    with col1:
-        units = st.selectbox("Units", [4, 5], key=f"units_{i}")
-    with col2:
-        h_course = (
-            st.number_input("Class Highest", 0.1, 100.0, 100.0, key=f"h_{i}")
-            if calc_method == "Normalise from Class Highest"
-            else 100.0
+        for i, cname in enumerate(course_names):
+            st.markdown(f"### {cname}")
+
+            c1, c2 = st.columns(2)
+            with c1:
+                units = st.selectbox("Units", [4, 5], key=f"u_{current_sem}_{i}")
+            with c2:
+                h_course = st.number_input(
+                    "Class Highest",
+                    0.1, 100.0, 100.0,
+                    key=f"h_{current_sem}_{i}"
+                )
+
+            ec = st.columns(3)
+            ec1 = ec[0].number_input(f"EC1 (0–{w1})", 0.0, w1, key=f"ec1_{current_sem}_{i}")
+            ec2 = ec[1].number_input(f"EC2 (0–{w2})", 0.0, w2, key=f"ec2_{current_sem}_{i}")
+            ec3 = ec[2].number_input(f"EC3 (0–{w3})", 0.0, w3, key=f"ec3_{current_sem}_{i}")
+
+            courses_data.append({
+                "Course": cname,
+                "Units": units,
+                "ec1": ec1,
+                "ec2": ec2,
+                "ec3": ec3,
+                "h": h_course
+            })
+
+            st.divider()
+
+        # -------------------------
+        # Compute Semester SGPA
+        # -------------------------
+        if st.button("Compute Semester Result", key=f"calc_{current_sem}"):
+            rows = []
+            total_gp = 0
+            total_units = 0
+
+            for c in courses_data:
+                raw = total_percent_from_components(c["ec1"], c["ec2"], c["ec3"])
+                final = (raw / c["h"]) * 100
+
+                gp, grade = grade_point_and_letter_absolute(final)
+                credit_pts = gp * c["Units"]
+
+                total_gp += credit_pts
+                total_units += c["Units"]
+
+                rows.append({
+                    "Course": c["Course"],
+                    "Units": c["Units"],
+                    "Total (%)": f"{final:.2f}",
+                    "GP": gp,
+                    "Grade": grade,
+                    "Result": "Pass" if gp >= 4.5 else "Fail"
+                })
+
+            df = pd.DataFrame(rows)
+            sgpa = total_gp / total_units if total_units else 0
+
+            st.session_state.semester_results[current_sem] = {
+                "df": df,
+                "sgpa": sgpa,
+                "total_gp": total_gp,
+                "total_units": total_units
+            }
+
+            st.table(df)
+
+            if sgpa >= 5.5:
+                st.success(f"Semester SGPA: {sgpa:.2f} — PASS")
+            else:
+                st.error(f"Semester SGPA: {sgpa:.2f} — FAIL")
+
+# -------------------------
+# CGPA + Analytics
+# -------------------------
+st.markdown("---")
+st.header("📊 Cumulative Performance")
+
+completed = st.session_state.semester_results
+
+if len(completed) >= 2:
+    total_gp_all = sum(v["total_gp"] for v in completed.values())
+    total_units_all = sum(v["total_units"] for v in completed.values())
+    cgpa = total_gp_all / total_units_all
+
+    if cgpa >= 5.5:
+        st.success(f"CGPA: {cgpa:.2f} — PASS")
+    else:
+        st.error(f"CGPA: {cgpa:.2f} — FAIL")
+
+    # SGPA Trend Chart
+    sems = sorted(completed.keys())
+    sgpas = [completed[s]["sgpa"] for s in sems]
+
+    fig, ax = plt.subplots()
+    ax.plot(sems, sgpas, marker="o")
+    ax.set_xlabel("Semester")
+    ax.set_ylabel("SGPA")
+    ax.set_title("SGPA Trend")
+    st.pyplot(fig)
+else:
+    st.info("CGPA will be available after completion of at least 2 semesters.")
+
+# -------------------------
+# Exports
+# -------------------------
+st.markdown("---")
+st.header("📥 Export Results")
+
+if completed:
+    for sem, data in completed.items():
+        csv = data["df"].to_csv(index=False).encode("utf-8")
+        st.download_button(
+            f"Download Semester {sem} CSV",
+            csv,
+            file_name=f"semester_{sem}_results.csv",
+            mime="text/csv"
         )
 
-    if same_weights:
-        w1, w2, w3 = gw1, gw2, gw3
-        st.caption(f"Weights → EC1: {w1}%, EC2: {w2}%, EC3: {w3}%")
-    else:
-        wc = st.columns(3)
-        w1 = wc[0].number_input("EC1 weight", 0.0, 100.0, 30.0, key=f"w1_{i}")
-        w2 = wc[1].number_input("EC2 weight", 0.0, 100.0, 30.0, key=f"w2_{i}")
-        w3 = wc[2].number_input("EC3 weight", 0.0, 100.0, 40.0, key=f"w3_{i}")
+    # Transcript CSV
+    all_rows = []
+    for sem, data in completed.items():
+        df = data["df"].copy()
+        df.insert(0, "Semester", sem)
+        all_rows.append(df)
 
-    ec_cols = st.columns(3)
-    with ec_cols[0]:
-        p1 = st.checkbox("EC1 pending", key=f"p1_{i}")
-        ec1 = None if p1 else st.number_input(f"EC1 (0–{w1})", 0.0, float(w1), key=f"ec1_{i}")
-    with ec_cols[1]:
-        p2 = st.checkbox("EC2 pending", key=f"p2_{i}")
-        ec2 = None if p2 else st.number_input(f"EC2 (0–{w2})", 0.0, float(w2), key=f"ec2_{i}")
-    with ec_cols[2]:
-        p3 = st.checkbox("EC3 pending", key=f"p3_{i}")
-        ec3 = None if p3 else st.number_input(f"EC3 (0–{w3})", 0.0, float(w3), key=f"ec3_{i}")
-
-    courses_data.append({
-        "name": cname,
-        "units": units,
-        "ec1": ec1,
-        "ec2": ec2,
-        "ec3": ec3,
-        "w1": w1,
-        "w2": w2,
-        "w3": w3,
-        "h_course": h_course
-    })
-
-    # ✅ Clean visual separator
-    st.divider()
-
-# -------------------------
-# Compute Results
-# -------------------------
-col_calc, col_reset = st.columns(2)
-
-if col_calc.button("Compute Results"):
-    rows = []
-    total_gp = 0
-    total_units = 0
-
-    for c in courses_data:
-        raw = total_percent_from_components(c["ec1"], c["ec2"], c["ec3"])
-        final = (raw / c["h_course"]) * 100 if calc_method == "Normalise from Class Highest" else raw
-
-        gp, grade = grade_point_and_letter_absolute(final)
-        credit_pts = gp * c["units"]
-
-        total_gp += credit_pts
-        total_units += c["units"]
-
-        rows.append({
-            "Course": c["name"],
-            "Units": c["units"],
-            "Total (%)": f"{final:.2f}",
-            "GP": gp,
-            "Grade": grade,
-            "Result": "Pass" if gp >= 4.5 else "Fail"
-        })
-
-    df = pd.DataFrame(rows)
-    st.table(df)
-
-    final_cgpa = total_gp / total_units if total_units else 0
-
-    if final_cgpa >= 5.5:
-        status = "PASS"
-        color = "green"
-    else:
-        status = "FAIL"
-        color = "red"
-
-    st.markdown(
-        f"""
-        <h3>
-            Weighted CGPA:
-            <span style='color:{color}'>{final_cgpa:.2f}</span>
-            &nbsp;—&nbsp;
-            <span style='color:{color}; font-weight:700'>{status}</span>
-        </h3>
-        """,
-        unsafe_allow_html=True
+    transcript = pd.concat(all_rows)
+    st.download_button(
+        "Download Full Transcript (CSV)",
+        transcript.to_csv(index=False).encode("utf-8"),
+        file_name="full_transcript.csv",
+        mime="text/csv"
     )
-
-if col_reset.button("Reset"):
-    for k in list(st.session_state.keys()):
-        del st.session_state[k]
-    st.rerun()
 
 # -------------------------
 # Footer
 # -------------------------
 st.markdown("---")
-st.markdown("""
-<div style='border:1px solid #ddd;padding:12px;border-radius:6px;background:#fff;'>
-<b style='color:red;'>Grade mapping:</b><br>
-A=10 | A-=9 | B=8 | B-=7 | C=6 | C-=5 | D=4 | E=2<br><br>
-<b style='color:red;'>Pass criteria:</b><br>
-• Min. grade point per course ≥ 4.5<br>
-• Overall CGPA ≥ 5.5
-</div>
-""", unsafe_allow_html=True)
+st.caption("Grade rule: GP ≥ 4.5 per course | SGPA / CGPA ≥ 5.5 to clear")
 
 st.markdown(
     "<p style='text-align:right; color:gray; font-size:11px;'>Developed by <b>Subodh Purohit</b></p>",
