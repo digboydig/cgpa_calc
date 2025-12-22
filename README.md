@@ -31,5 +31,5 @@ CGPA ≥ 5.5 overall
 If EC3 is pending, select it and enter your target grade (e.g., 8 or 9) —
 the app tells you how much you need in the remaining components to reach that goal.
 
-🧑‍💻 Author
+🧑‍💻 Author: SP
 Developed with ❤️ using Streamlit, Pandas, and NumPy.
