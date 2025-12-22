@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
 
 st.set_page_config(page_title="🎓 SGPA / CGPA Calculator", layout="centered")
 
@@ -39,7 +38,7 @@ with st.sidebar:
     st.header("Semester Selection")
     current_sem = st.selectbox(
         "Select semester",
-        options=[1, 2, 3],
+        [1, 2, 3],
         format_func=lambda x: f"Semester {x}"
     )
 
@@ -50,7 +49,7 @@ with st.sidebar:
         st.text_input(
             f"Course {i+1} name",
             f"Course {i+1}",
-            key=f"c_{current_sem}_{i}"
+            key=f"course_{current_sem}_{i}"
         )
         for i in range(num_courses)
     ]
@@ -72,7 +71,7 @@ tabs = st.tabs([f"Semester {i}" for i in range(1, 4)])
 for sem_idx, tab in enumerate(tabs, start=1):
     with tab:
         if sem_idx != current_sem:
-            st.info("Switch semester from sidebar to edit.")
+            st.info("Select this semester from sidebar to edit.")
             continue
 
         st.subheader(f"📚 Semester {current_sem}")
@@ -81,10 +80,10 @@ for sem_idx, tab in enumerate(tabs, start=1):
         for i, cname in enumerate(course_names):
             st.markdown(f"### {cname}")
 
-            c1, c2 = st.columns(2)
-            with c1:
-                units = st.selectbox("Units", [4, 5], key=f"u_{current_sem}_{i}")
-            with c2:
+            col1, col2 = st.columns(2)
+            with col1:
+                units = st.selectbox("Units", [4, 5], key=f"units_{current_sem}_{i}")
+            with col2:
                 h_course = st.number_input(
                     "Class Highest",
                     0.1, 100.0, 100.0,
@@ -169,16 +168,15 @@ if len(completed) >= 2:
     else:
         st.error(f"CGPA: {cgpa:.2f} — FAIL")
 
-    # SGPA Trend Chart
-    sems = sorted(completed.keys())
-    sgpas = [completed[s]["sgpa"] for s in sems]
+    # SGPA Trend Chart (Streamlit-native)
+    trend_df = pd.DataFrame({
+        "Semester": sorted(completed.keys()),
+        "SGPA": [completed[s]["sgpa"] for s in sorted(completed.keys())]
+    }).set_index("Semester")
 
-    fig, ax = plt.subplots()
-    ax.plot(sems, sgpas, marker="o")
-    ax.set_xlabel("Semester")
-    ax.set_ylabel("SGPA")
-    ax.set_title("SGPA Trend")
-    st.pyplot(fig)
+    st.subheader("SGPA Trend")
+    st.line_chart(trend_df)
+
 else:
     st.info("CGPA will be available after completion of at least 2 semesters.")
 
@@ -198,14 +196,12 @@ if completed:
             mime="text/csv"
         )
 
-    # Transcript CSV
-    all_rows = []
-    for sem, data in completed.items():
-        df = data["df"].copy()
-        df.insert(0, "Semester", sem)
-        all_rows.append(df)
+    # Full transcript
+    transcript = pd.concat(
+        [data["df"].assign(Semester=sem) for sem, data in completed.items()],
+        ignore_index=True
+    )
 
-    transcript = pd.concat(all_rows)
     st.download_button(
         "Download Full Transcript (CSV)",
         transcript.to_csv(index=False).encode("utf-8"),
@@ -217,7 +213,7 @@ if completed:
 # Footer
 # -------------------------
 st.markdown("---")
-st.caption("Grade rule: GP ≥ 4.5 per course | SGPA / CGPA ≥ 5.5 to clear")
+st.caption("GP ≥ 4.5 per course | SGPA / CGPA ≥ 5.5 to clear")
 
 st.markdown(
     "<p style='text-align:right; color:gray; font-size:11px;'>Developed by <b>Subodh Purohit</b></p>",
