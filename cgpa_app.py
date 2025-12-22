@@ -4,21 +4,6 @@ import pandas as pd
 st.set_page_config(page_title="🎓 CGPA Calculator", layout="centered")
 
 # -------------------------
-# CSS
-# -------------------------
-st.markdown("""
-<style>
-.course-box {
-    border: 2px solid #ff4b4b;
-    padding: 20px;
-    border-radius: 10px;
-    margin-bottom: 25px;
-    background-color: #fffafb;
-}
-</style>
-""", unsafe_allow_html=True)
-
-# -------------------------
 # Helper functions
 # -------------------------
 def grade_point_and_letter_absolute(total):
@@ -74,59 +59,56 @@ st.subheader("Enter marks and units per course")
 courses_data = []
 
 for i, cname in enumerate(course_names):
-    with st.container():
-        st.markdown('<div class="course-box">', unsafe_allow_html=True)
+    st.markdown(f"### 📚 {cname}")
 
-        st.subheader(f"📚 {cname}")
+    col1, col2 = st.columns(2)
+    with col1:
+        units = st.selectbox("Units", [4, 5], key=f"units_{i}")
+    with col2:
+        h_course = (
+            st.number_input("Class Highest", 0.1, 100.0, 100.0, key=f"h_{i}")
+            if calc_method == "Normalise from Class Highest"
+            else 100.0
+        )
 
-        col1, col2 = st.columns(2)
-        with col1:
-            units = st.selectbox("Units", [4, 5], key=f"units_{i}")
-        with col2:
-            h_course = (
-                st.number_input("Class Highest", 0.1, 100.0, 100.0, key=f"h_{i}")
-                if calc_method == "Normalise from Class Highest"
-                else 100.0
-            )
+    if same_weights:
+        w1, w2, w3 = gw1, gw2, gw3
+        st.caption(f"Weights → EC1: {w1}%, EC2: {w2}%, EC3: {w3}%")
+    else:
+        wc = st.columns(3)
+        w1 = wc[0].number_input("EC1 weight", 0.0, 100.0, 30.0, key=f"w1_{i}")
+        w2 = wc[1].number_input("EC2 weight", 0.0, 100.0, 30.0, key=f"w2_{i}")
+        w3 = wc[2].number_input("EC3 weight", 0.0, 100.0, 40.0, key=f"w3_{i}")
 
-        if same_weights:
-            w1, w2, w3 = gw1, gw2, gw3
-            st.caption(f"Weights → EC1: {w1}%, EC2: {w2}%, EC3: {w3}%")
-        else:
-            wc = st.columns(3)
-            w1 = wc[0].number_input("EC1 weight", 0.0, 100.0, 30.0, key=f"w1_{i}")
-            w2 = wc[1].number_input("EC2 weight", 0.0, 100.0, 30.0, key=f"w2_{i}")
-            w3 = wc[2].number_input("EC3 weight", 0.0, 100.0, 40.0, key=f"w3_{i}")
+    ec_cols = st.columns(3)
+    with ec_cols[0]:
+        p1 = st.checkbox("EC1 pending", key=f"p1_{i}")
+        ec1 = None if p1 else st.number_input(f"EC1 (0–{w1})", 0.0, float(w1), key=f"ec1_{i}")
+    with ec_cols[1]:
+        p2 = st.checkbox("EC2 pending", key=f"p2_{i}")
+        ec2 = None if p2 else st.number_input(f"EC2 (0–{w2})", 0.0, float(w2), key=f"ec2_{i}")
+    with ec_cols[2]:
+        p3 = st.checkbox("EC3 pending", key=f"p3_{i}")
+        ec3 = None if p3 else st.number_input(f"EC3 (0–{w3})", 0.0, float(w3), key=f"ec3_{i}")
 
-        ec_cols = st.columns(3)
-        with ec_cols[0]:
-            p1 = st.checkbox("EC1 pending", key=f"p1_{i}")
-            ec1 = None if p1 else st.number_input(f"EC1 (0–{w1})", 0.0, float(w1), key=f"ec1_{i}")
-        with ec_cols[1]:
-            p2 = st.checkbox("EC2 pending", key=f"p2_{i}")
-            ec2 = None if p2 else st.number_input(f"EC2 (0–{w2})", 0.0, float(w2), key=f"ec2_{i}")
-        with ec_cols[2]:
-            p3 = st.checkbox("EC3 pending", key=f"p3_{i}")
-            ec3 = None if p3 else st.number_input(f"EC3 (0–{w3})", 0.0, float(w3), key=f"ec3_{i}")
+    courses_data.append({
+        "name": cname,
+        "units": units,
+        "ec1": ec1,
+        "ec2": ec2,
+        "ec3": ec3,
+        "w1": w1,
+        "w2": w2,
+        "w3": w3,
+        "h_course": h_course
+    })
 
-        st.markdown('</div>', unsafe_allow_html=True)
-
-        courses_data.append({
-            "name": cname,
-            "units": units,
-            "ec1": ec1,
-            "ec2": ec2,
-            "ec3": ec3,
-            "w1": w1,
-            "w2": w2,
-            "w3": w3,
-            "h_course": h_course
-        })
+    # ✅ Clean visual separator
+    st.divider()
 
 # -------------------------
-# Compute
+# Compute Results
 # -------------------------
-st.markdown("---")
 col_calc, col_reset = st.columns(2)
 
 if col_calc.button("Compute Results"):
@@ -150,7 +132,7 @@ if col_calc.button("Compute Results"):
             "Total (%)": f"{final:.2f}",
             "GP": gp,
             "Grade": grade,
-            "Pass": "Pass" if gp >= 4.5 else "Fail"
+            "Result": "Pass" if gp >= 4.5 else "Fail"
         })
 
     df = pd.DataFrame(rows)
@@ -196,4 +178,7 @@ A=10 | A-=9 | B=8 | B-=7 | C=6 | C-=5 | D=4 | E=2<br><br>
 </div>
 """, unsafe_allow_html=True)
 
-st.markdown("<p style='text-align:right; color:gray; font-size:11px;'>Developed by <b>Subodh Purohit</b></p>", unsafe_allow_html=True)
+st.markdown(
+    "<p style='text-align:right; color:gray; font-size:11px;'>Developed by <b>Subodh Purohit</b></p>",
+    unsafe_allow_html=True
+)
