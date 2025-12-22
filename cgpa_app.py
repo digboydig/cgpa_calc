@@ -28,6 +28,12 @@ if "semester_results" not in st.session_state:
     st.session_state.semester_results = {}
 
 # -------------------------
+# Title
+# -------------------------
+st.title("🎓 SGPA / CGPA Calculator")
+st.caption("Semester-wise SGPA with normalisation & per-course weight control")
+
+# -------------------------
 # Sidebar
 # -------------------------
 with st.sidebar:
