@@ -296,6 +296,6 @@ A=10 | A-=9 | B=8 | B-=7 | C=6 | C-=5 | D=4 | E=2<br><br>
 """, unsafe_allow_html=True)
 
 st.markdown(
-    "<p style='text-align:right; color:gray; font-size:11px;'>Developed by <b>Subodh Purohit</b>| Last updated: 22 Dec 2025</p>",
+    "<p style='text-align:right; color:gray; font-size:11px;'>Developed by <b>Subodh Purohit</b> | Last updated: 22 Dec 2025</p>",
     unsafe_allow_html=True
 )
