@@ -98,6 +98,7 @@ for sem_idx, tab in enumerate(tabs, start=1):
         # ==========================================
         if sem_idx == current_sem:
             st.header(f"Input: Semester {current_sem} Marks")
+            
             courses_data = []
             bad_weights = False
 
@@ -246,12 +247,13 @@ if len(completed) > 0:
         cgpa = sum(v["total_gp"] for v in completed.values()) / sum(v["total_units"] for v in completed.values())
         st.success(f"## 🏆 CGPA: {cgpa:.2f}" if cgpa >= 5.5 else f"## CGPA: {cgpa:.2f} — FAIL")
         
-        # Trend Chart
+        # Trend Chart (Bar Graph)
         trend_df = pd.DataFrame(
             {"SGPA": [completed[s]["sgpa"] for s in sorted(completed)]},
             index=[f"Semester {s}" for s in sorted(completed)]
         )
-        st.line_chart(trend_df)
+        # Using bar chart instead of line chart
+        st.bar_chart(trend_df)
     else:
         st.info("CGPA will be available after completion of at least 2 semesters.")
 
@@ -295,6 +297,6 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.markdown(
-    "<p style='text-align:right; color:gray; font-size:11px;'>Developed by <b>Subodh Purohit</b> | Last updated: 01 Jan 2026</p>",
+    "<p style='text-align:right; color:gray; font-size:11px;'>Developed by <b>Subodh Purohit</b> | Last updated: 1 Jan 2026</p>",
     unsafe_allow_html=True
 )
