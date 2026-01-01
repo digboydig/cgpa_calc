@@ -118,27 +118,48 @@ for sem_idx, tab in enumerate(tabs, start=1):
 
             df_template = pd.DataFrame(default_data)
 
-            # 2. Configure Columns for the Editor
-            column_config = {
-                "Course Name": st.column_config.TextColumn("Course Name", required=True),
-                "Units": st.column_config.SelectColumn("Units", options=[4, 5], required=True),
-                "EC1": st.column_config.NumberColumn("EC1", min_value=0, max_value=100),
-                "EC2": st.column_config.NumberColumn("EC2", min_value=0, max_value=100),
-                "EC3": st.column_config.NumberColumn("EC3", min_value=0, max_value=100),
-            }
+            # --- COMPATIBILITY FIX: FORCE CATEGORICAL FOR DROPDOWN ---
+            # Instead of st.column_config, we use pandas types to enforce the dropdown
+            df_template["Units"] = df_template["Units"].astype("category")
+            # We explicitly set the categories we want to appear in the dropdown
+            df_template["Units"] = df_template["Units"].cat.set_categories([4, 5])
             
-            if "Highest" in default_data:
-                column_config["Highest"] = st.column_config.NumberColumn("Highest (H)", min_value=1, max_value=100)
+            # Ensure numeric columns are floats (prevents text input errors)
+            numeric_cols = ["EC1", "EC2", "EC3"]
+            if "Highest" in df_template.columns: numeric_cols.append("Highest")
+            if "W1" in df_template.columns: numeric_cols.extend(["W1", "W2", "W3"])
+            
+            for col in numeric_cols:
+                df_template[col] = df_template[col].astype("float64")
 
-            # 3. Render Data Editor
-            edited_df = st.data_editor(
-                df_template,
-                column_config=column_config,
-                num_rows="dynamic",
-                use_container_width=True,
-                key=f"editor_{current_sem}",
-                hide_index=True
-            )
+            # 3. Render Data Editor (Check for version compatibility)
+            editor_kwargs = {
+                "data": df_template,
+                "use_container_width": True,
+                "key": f"editor_{current_sem}",
+                "num_rows": "dynamic" # This allows adding/deleting rows
+            }
+
+            try:
+                # Try standard data_editor
+                edited_df = st.data_editor(**editor_kwargs)
+            except AttributeError:
+                # Fallback to experimental_data_editor for older Streamlit versions
+                try:
+                    edited_df = st.experimental_data_editor(**editor_kwargs)
+                except Exception:
+                    # Fallback for very old versions (remove num_rows if that fails)
+                    del editor_kwargs["num_rows"]
+                    if hasattr(st, "experimental_data_editor"):
+                        edited_df = st.experimental_data_editor(**editor_kwargs)
+                    else:
+                        st.error("Your Streamlit version is too old to support the Table Editor. Please upgrade.")
+                        st.stop()
+            except TypeError:
+                # If num_rows is not supported in the installed version
+                del editor_kwargs["num_rows"]
+                edited_df = st.data_editor(**editor_kwargs)
+
             
             # 4. Projection Tool
             st.markdown("#### 🎯 Grade Projection Tool")
@@ -147,48 +168,52 @@ for sem_idx, tab in enumerate(tabs, start=1):
                 if course_opts:
                     selected_course = st.selectbox("Select Course", course_opts)
                     # Get data for this course
-                    row = edited_df[edited_df["Course Name"] == selected_course].iloc[0]
+                    # Handle potential empty dataframe or missing selection
+                    subset = edited_df[edited_df["Course Name"] == selected_course]
                     
-                    # Determine Weights
-                    if same_weights:
-                        p_w1, p_w2, p_w3 = gw1, gw2, gw3
-                    else:
-                        p_w1 = row.get("W1", 30.0)
-                        p_w2 = row.get("W2", 30.0)
-                        p_w3 = row.get("W3", 40.0)
+                    if not subset.empty:
+                        row = subset.iloc[0]
+                        
+                        # Determine Weights
+                        if same_weights:
+                            p_w1, p_w2, p_w3 = gw1, gw2, gw3
+                        else:
+                            p_w1 = row.get("W1", 30.0)
+                            p_w2 = row.get("W2", 30.0)
+                            p_w3 = row.get("W3", 40.0)
 
-                    # Determine Highest
-                    p_h = row.get("Highest", 100.0) if calc_method == "Normalise from Class Highest" else 100.0
-                    
-                    # Inputs
-                    p_ec1 = row.get("EC1")
-                    p_ec2 = row.get("EC2")
-                    p_ec3 = row.get("EC3")
-                    
-                    current_raw = safe_sum(p_ec1, p_ec2, p_ec3)
-                    
-                    target_gp = st.selectbox("Target GP", list(GP_TO_PERCENT.keys()), index=2)
-                    target_percent = GP_TO_PERCENT[target_gp]
-                    target_raw = (target_percent / 100) * p_h
-                    
-                    need = target_raw - current_raw
-                    
-                    # Calculate capacity of pending components
-                    pending_capacity = 0
-                    if pd.isna(p_ec1): pending_capacity += p_w1
-                    if pd.isna(p_ec2): pending_capacity += p_w2
-                    if pd.isna(p_ec3): pending_capacity += p_w3
-                    
-                    col_proj1, col_proj2 = st.columns(2)
-                    col_proj1.metric("Current Raw Score", f"{current_raw:.2f}")
-                    col_proj2.metric("Required Raw Score", f"{target_raw:.2f}")
-                    
-                    if need <= 0:
-                        st.success(f"✅ Target {target_gp} already achieved!")
-                    elif need > pending_capacity:
-                        st.error(f"❌ Cannot reach {target_gp}. Max possible addition is {pending_capacity:.2f}.")
-                    else:
-                        st.info(f"You need **{need:.2f}** more marks from pending components.")
+                        # Determine Highest
+                        p_h = row.get("Highest", 100.0) if calc_method == "Normalise from Class Highest" else 100.0
+                        
+                        # Inputs
+                        p_ec1 = row.get("EC1")
+                        p_ec2 = row.get("EC2")
+                        p_ec3 = row.get("EC3")
+                        
+                        current_raw = safe_sum(p_ec1, p_ec2, p_ec3)
+                        
+                        target_gp = st.selectbox("Target GP", list(GP_TO_PERCENT.keys()), index=2)
+                        target_percent = GP_TO_PERCENT[target_gp]
+                        target_raw = (target_percent / 100) * p_h
+                        
+                        need = target_raw - current_raw
+                        
+                        # Calculate capacity of pending components
+                        pending_capacity = 0
+                        if pd.isna(p_ec1): pending_capacity += p_w1
+                        if pd.isna(p_ec2): pending_capacity += p_w2
+                        if pd.isna(p_ec3): pending_capacity += p_w3
+                        
+                        col_proj1, col_proj2 = st.columns(2)
+                        col_proj1.metric("Current Raw Score", f"{current_raw:.2f}")
+                        col_proj2.metric("Required Raw Score", f"{target_raw:.2f}")
+                        
+                        if need <= 0:
+                            st.success(f"✅ Target {target_gp} already achieved!")
+                        elif need > pending_capacity:
+                            st.error(f"❌ Cannot reach {target_gp}. Max possible addition is {pending_capacity:.2f}.")
+                        else:
+                            st.info(f"You need **{need:.2f}** more marks from pending components.")
 
             st.divider()
 
@@ -205,13 +230,20 @@ for sem_idx, tab in enumerate(tabs, start=1):
 
                 for index, row in edited_df.iterrows():
                     cname = row["Course Name"]
+                    # Handle units being potentially NaN if user cleared it, default to 4
                     units = row["Units"]
+                    if pd.isna(units): units = 4
                     
                     # Weights validation (if per course)
                     if not same_weights:
                         w1 = row.get("W1", 0)
                         w2 = row.get("W2", 0)
                         w3 = row.get("W3", 0)
+                        # Ensure we handle NaNs in weights
+                        w1 = 0 if pd.isna(w1) else w1
+                        w2 = 0 if pd.isna(w2) else w2
+                        w3 = 0 if pd.isna(w3) else w3
+                        
                         if abs(w1 + w2 + w3 - 100) > 1e-6:
                             st.error(f"Weights for '{cname}' must sum to 100.")
                             st.stop()
@@ -224,7 +256,7 @@ for sem_idx, tab in enumerate(tabs, start=1):
                     
                     # Highest
                     h_course = row.get("Highest", 100.0) if calc_method == "Normalise from Class Highest" else 100.0
-                    if h_course <= 0: h_course = 100.0 # Prevent div by zero
+                    if pd.isna(h_course) or h_course <= 0: h_course = 100.0
                     
                     final = (raw / h_course) * 100
                     gp, grade = grade_point_and_letter_absolute(final)
