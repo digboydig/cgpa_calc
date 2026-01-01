@@ -97,7 +97,6 @@ for sem_idx, tab in enumerate(tabs, start=1):
         # EDIT MODE: Only if this is the selected sem
         # ==========================================
         if sem_idx == current_sem:
-            # --- CHECK THIS LINE: It definitely has no icon ---
             st.header(f"Input: Semester {current_sem} Marks")
             
             courses_data = []
