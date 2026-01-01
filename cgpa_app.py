@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import altair as alt
 
 st.set_page_config(page_title="🎓 SGPA / CGPA Calculator", layout="centered")
 
@@ -19,7 +20,8 @@ def grade_point_and_letter_absolute(total):
 GP_TO_PERCENT = {10: 90, 9: 80, 8: 70, 7: 60, 6: 50, 5: 45, 4: 35, 2: 0}
 
 def safe_sum(*vals):
-    return sum(v for v in vals if v is not None)
+    # Treat None or NaN as 0 for summing
+    return sum(v for v in vals if pd.notna(v))
 
 # =========================================================
 # Session state
@@ -51,27 +53,23 @@ with st.sidebar:
     )
 
     st.markdown("---")
-    # Inputs for the CURRENTLY selected semester
+    # Number of courses controls the initial rows in the table
     num_courses = st.number_input(
         f"Courses in Semester {current_sem}",
         min_value=1,
-        max_value=12,
+        max_value=15,
         value=4
     )
-
-    course_names = [
-        st.text_input(
-            f"Course {i+1} name",
-            f"Course {i+1}",
-            key=f"course_{current_sem}_{i}"
-        )
-        for i in range(num_courses)
-    ]
+    
+    st.info("💡 Tip: Enter course names and marks directly in the table.")
 
     st.markdown("---")
     st.subheader("Weights")
     same_weights = st.checkbox("Use same weights for all courses?", value=True)
 
+    # Global weights variables
+    gw1, gw2, gw3 = 30.0, 30.0, 40.0
+    
     if same_weights:
         gw1 = st.number_input("EC1 (%)", 0.0, 100.0, 30.0)
         gw2 = st.number_input("EC2 (%)", 0.0, 100.0, 30.0)
@@ -99,116 +97,156 @@ for sem_idx, tab in enumerate(tabs, start=1):
         if sem_idx == current_sem:
             st.header(f"Input: Semester {current_sem} Marks")
             
-            courses_data = []
-            bad_weights = False
+            # 1. Prepare Initial Data for the Editor
+            default_data = {
+                "Course Name": [f"Course {i+1}" for i in range(num_courses)],
+                "Units": [4] * num_courses,
+                "EC1": [None] * num_courses,
+                "EC2": [None] * num_courses,
+                "EC3": [None] * num_courses,
+            }
+            
+            # Add Weight columns if not same_weights
+            if not same_weights:
+                default_data["W1"] = [30.0] * num_courses
+                default_data["W2"] = [30.0] * num_courses
+                default_data["W3"] = [40.0] * num_courses
+                
+            # Add Highest column if Normalisation is ON
+            if calc_method == "Normalise from Class Highest":
+                default_data["Highest"] = [100.0] * num_courses
 
-            for i, cname in enumerate(course_names):
-                st.subheader(cname)
+            df_template = pd.DataFrame(default_data)
 
-                col1, col2 = st.columns(2)
-                with col1:
-                    units = st.selectbox(
-                        "Units",
-                        [4, 5],
-                        key=f"units_{current_sem}_{i}"
-                    )
+            # 2. Configure Columns for the Editor
+            column_config = {
+                "Course Name": st.column_config.TextColumn("Course Name", required=True),
+                "Units": st.column_config.SelectColumn("Units", options=[4, 5], required=True),
+                "EC1": st.column_config.NumberColumn("EC1", min_value=0, max_value=100),
+                "EC2": st.column_config.NumberColumn("EC2", min_value=0, max_value=100),
+                "EC3": st.column_config.NumberColumn("EC3", min_value=0, max_value=100),
+            }
+            
+            if "Highest" in default_data:
+                column_config["Highest"] = st.column_config.NumberColumn("Highest (H)", min_value=1, max_value=100)
 
-                with col2:
-                    if calc_method == "Normalise from Class Highest":
-                        unknown = st.checkbox(
-                            "Class highest unknown?",
-                            key=f"unk_{current_sem}_{i}"
-                        )
-                        if unknown:
-                            h_course = st.slider(
-                                "Assumed Class Highest",
-                                min_value=60.0,
-                                max_value=100.0,
-                                value=85.0,
-                                step=0.5,
-                                key=f"hslider_{current_sem}_{i}"
-                            )
-                            st.caption("Adjust slider to see grade impact")
-                        else:
-                            h_course = st.number_input(
-                                "Class Highest",
-                                0.1, 100.0, 100.0,
-                                key=f"h_{current_sem}_{i}"
-                            )
+            # 3. Render Data Editor
+            edited_df = st.data_editor(
+                df_template,
+                column_config=column_config,
+                num_rows="dynamic",
+                use_container_width=True,
+                key=f"editor_{current_sem}",
+                hide_index=True
+            )
+            
+            # 4. Projection Tool
+            st.markdown("#### 🎯 Grade Projection Tool")
+            with st.expander("Calculate required marks for a specific course"):
+                course_opts = edited_df["Course Name"].unique().tolist()
+                if course_opts:
+                    selected_course = st.selectbox("Select Course", course_opts)
+                    # Get data for this course
+                    row = edited_df[edited_df["Course Name"] == selected_course].iloc[0]
+                    
+                    # Determine Weights
+                    if same_weights:
+                        p_w1, p_w2, p_w3 = gw1, gw2, gw3
                     else:
-                        h_course = 100.0
+                        p_w1 = row.get("W1", 30.0)
+                        p_w2 = row.get("W2", 30.0)
+                        p_w3 = row.get("W3", 40.0)
 
-                # ---------- Weights ----------
-                if same_weights:
-                    w1, w2, w3 = gw1, gw2, gw3
-                else:
-                    wc = st.columns(3)
-                    w1 = wc[0].number_input("EC1 (%)", 0.0, 100.0, 30.0, key=f"w1_{current_sem}_{i}")
-                    w2 = wc[1].number_input("EC2 (%)", 0.0, 100.0, 30.0, key=f"w2_{current_sem}_{i}")
-                    w3 = wc[2].number_input("EC3 (%)", 0.0, 100.0, 40.0, key=f"w3_{current_sem}_{i}")
-
-                    if abs(w1 + w2 + w3 - 100) > 1e-6:
-                        st.warning("Weights must sum to 100")
-                        bad_weights = True
-
-                # ---------- EC inputs ----------
-                ec_cols = st.columns(3)
-                ec1 = None if ec_cols[0].checkbox("EC1 pending", key=f"p1_{current_sem}_{i}") else ec_cols[0].number_input(f"EC1 (0–{w1})", 0.0, float(w1), key=f"ec1_{current_sem}_{i}")
-                ec2 = None if ec_cols[1].checkbox("EC2 pending", key=f"p2_{current_sem}_{i}") else ec_cols[1].number_input(f"EC2 (0–{w2})", 0.0, float(w2), key=f"ec2_{current_sem}_{i}")
-                ec3 = None if ec_cols[2].checkbox("EC3 pending", key=f"p3_{current_sem}_{i}") else ec_cols[2].number_input(f"EC3 (0–{w3})", 0.0, float(w3), key=f"ec3_{current_sem}_{i}")
-
-                # ---------- Projection ----------
-                with st.expander("🎯 Projection (if ECs pending)"):
-                    target_gp = st.selectbox("Target GP", list(GP_TO_PERCENT.keys()), index=2, key=f"tgp_{current_sem}_{i}")
+                    # Determine Highest
+                    p_h = row.get("Highest", 100.0) if calc_method == "Normalise from Class Highest" else 100.0
+                    
+                    # Inputs
+                    p_ec1 = row.get("EC1")
+                    p_ec2 = row.get("EC2")
+                    p_ec3 = row.get("EC3")
+                    
+                    current_raw = safe_sum(p_ec1, p_ec2, p_ec3)
+                    
+                    target_gp = st.selectbox("Target GP", list(GP_TO_PERCENT.keys()), index=2)
                     target_percent = GP_TO_PERCENT[target_gp]
-                    target_raw = (target_percent / 100) * h_course
-                    current_raw = safe_sum(ec1, ec2, ec3)
+                    target_raw = (target_percent / 100) * p_h
+                    
                     need = target_raw - current_raw
-                    pending_capacity = safe_sum(w1 if ec1 is None else 0, w2 if ec2 is None else 0, w3 if ec3 is None else 0)
-
+                    
+                    # Calculate capacity of pending components
+                    pending_capacity = 0
+                    if pd.isna(p_ec1): pending_capacity += p_w1
+                    if pd.isna(p_ec2): pending_capacity += p_w2
+                    if pd.isna(p_ec3): pending_capacity += p_w3
+                    
+                    col_proj1, col_proj2 = st.columns(2)
+                    col_proj1.metric("Current Raw Score", f"{current_raw:.2f}")
+                    col_proj2.metric("Required Raw Score", f"{target_raw:.2f}")
+                    
                     if need <= 0:
-                        st.success("Target already achievable.")
+                        st.success(f"✅ Target {target_gp} already achieved!")
                     elif need > pending_capacity:
-                        st.error("Target GP not reachable.")
+                        st.error(f"❌ Cannot reach {target_gp}. Max possible addition is {pending_capacity:.2f}.")
                     else:
-                        st.info(f"Need **{need:.2f}** more raw marks.")
+                        st.info(f"You need **{need:.2f}** more marks from pending components.")
 
-                courses_data.append({
-                    "Course": cname, "Units": units, "ec1": ec1, "ec2": ec2, "ec3": ec3, "h": h_course
-                })
-                st.divider()
+            st.divider()
 
-            # ---------- Compute Button ----------
+            # 5. Compute Button
             if st.button("Compute Semester Result", key=f"calc_{current_sem}"):
-                if bad_weights:
-                    st.error("Fix weight errors before computing.")
-                    st.stop()
-
                 rows = []
                 total_gp = 0
                 total_units = 0
+                
+                # Check Global Weights if applicable
+                if same_weights and abs(gw1 + gw2 + gw3 - 100) > 1e-6:
+                    st.error("Global weights must sum to 100.")
+                    st.stop()
 
-                for c in courses_data:
-                    raw = safe_sum(c["ec1"], c["ec2"], c["ec3"])
-                    final = (raw / c["h"]) * 100 if calc_method == "Normalise from Class Highest" else raw
+                for index, row in edited_df.iterrows():
+                    cname = row["Course Name"]
+                    units = row["Units"]
+                    
+                    # Weights validation (if per course)
+                    if not same_weights:
+                        w1 = row.get("W1", 0)
+                        w2 = row.get("W2", 0)
+                        w3 = row.get("W3", 0)
+                        if abs(w1 + w2 + w3 - 100) > 1e-6:
+                            st.error(f"Weights for '{cname}' must sum to 100.")
+                            st.stop()
+                    
+                    # Marks
+                    ec1 = row.get("EC1", 0)
+                    ec2 = row.get("EC2", 0)
+                    ec3 = row.get("EC3", 0)
+                    raw = safe_sum(ec1, ec2, ec3)
+                    
+                    # Highest
+                    h_course = row.get("Highest", 100.0) if calc_method == "Normalise from Class Highest" else 100.0
+                    if h_course <= 0: h_course = 100.0 # Prevent div by zero
+                    
+                    final = (raw / h_course) * 100
                     gp, grade = grade_point_and_letter_absolute(final)
-                    total_gp += gp * c["Units"]
-                    total_units += c["Units"]
+                    
+                    total_gp += gp * units
+                    total_units += units
+                    
                     rows.append({
-                        "Course": c["Course"],
-                        "Units": c["Units"],
+                        "Course": cname,
+                        "Units": units,
                         "Total (%)": f"{final:.2f}",
                         "GP": gp,
                         "Grade": grade,
                         "Result": "Pass" if gp >= 4.5 else "Fail"
                     })
 
-                df = pd.DataFrame(rows)
+                result_df = pd.DataFrame(rows)
                 sgpa = total_gp / total_units if total_units else 0
 
                 # Save to session state
                 st.session_state.semester_results[current_sem] = {
-                    "df": df,
+                    "df": result_df,
                     "sgpa": sgpa,
                     "total_gp": total_gp,
                     "total_units": total_units
@@ -247,12 +285,25 @@ if len(completed) > 0:
         cgpa = sum(v["total_gp"] for v in completed.values()) / sum(v["total_units"] for v in completed.values())
         st.success(f"## 🏆 CGPA: {cgpa:.2f}" if cgpa >= 5.5 else f"## CGPA: {cgpa:.2f} — FAIL")
         
-        # Trend Chart (Bar Graph)
-        trend_df = pd.DataFrame(
-            {"SGPA": [completed[s]["sgpa"] for s in sorted(completed)]},
-            index=[f"Semester {s}" for s in sorted(completed)]
+        # Trend Chart (Bar Graph with Altair)
+        chart_data = pd.DataFrame({
+            "Semester": [f"Semester {s}" for s in sorted(completed)],
+            "SGPA": [completed[s]["sgpa"] for s in sorted(completed)]
+        })
+
+        c = alt.Chart(chart_data).mark_bar(
+            size=50,
+            cornerRadiusTopLeft=6,
+            cornerRadiusTopRight=6,
+            color="#4F8BF9"
+        ).encode(
+            x=alt.X('Semester', axis=alt.Axis(labelAngle=0)),
+            y=alt.Y('SGPA', scale=alt.Scale(domain=[0, 10])),
+            tooltip=['Semester', 'SGPA']
+        ).properties(
+            title="SGPA Trend"
         )
-        st.bar_chart(trend_df)
+        st.altair_chart(c, use_container_width=True)
     else:
         st.info("CGPA will be available after completion of at least 2 semesters.")
 
@@ -261,16 +312,13 @@ if len(completed) > 0:
     
     all_rows = []
     for s in sorted(completed.keys()):
-        # Get the dataframe for this semester
         sem_df = completed[s]["df"].copy()
-        # Add a column for the Semester number
         sem_df.insert(0, "Semester", f"Sem {s}")
         all_rows.append(sem_df)
     
     if all_rows:
         full_df = pd.concat(all_rows, ignore_index=True)
-        # Reorder/Clean columns if needed
-        # UPDATED: Use st.table with MultiIndex for merged semester visual
+        # Use st.table with MultiIndex for merged look
         st.table(full_df.set_index(["Semester", "Course"]))
 
         # 3. CSV Download
