@@ -270,7 +270,8 @@ if len(completed) > 0:
     if all_rows:
         full_df = pd.concat(all_rows, ignore_index=True)
         # Reorder/Clean columns if needed
-        st.dataframe(full_df, use_container_width=True, hide_index=True)
+        # UPDATED: Use st.table with MultiIndex for merged semester visual
+        st.table(full_df.set_index(["Semester", "Course"]))
 
         # 3. CSV Download
         csv = full_df.to_csv(index=False).encode('utf-8')
@@ -296,6 +297,6 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.markdown(
-    "<p style='text-align:right; color:gray; font-size:11px;'>Developed by <b>Subodh Purohit</b> | Last updated: 01 Jan 2026</p>",
+    "<p style='text-align:right; color:gray; font-size:11px;'>Developed by <b>Subodh Purohit</b> | Last updated: 1 Jan 2026</p>",
     unsafe_allow_html=True
 )
