@@ -97,7 +97,7 @@ for sem_idx, tab in enumerate(tabs, start=1):
         # EDIT MODE: Only if this is the selected sem
         # ==========================================
         if sem_idx == current_sem:
-            # UPDATED: Removed pencil icon here
+            # --- CHECK THIS LINE: It definitely has no icon ---
             st.header(f"Input: Semester {current_sem} Marks")
             
             courses_data = []
@@ -253,7 +253,6 @@ if len(completed) > 0:
             {"SGPA": [completed[s]["sgpa"] for s in sorted(completed)]},
             index=[f"Semester {s}" for s in sorted(completed)]
         )
-        # Using bar chart instead of line chart
         st.bar_chart(trend_df)
     else:
         st.info("CGPA will be available after completion of at least 2 semesters.")
@@ -298,6 +297,6 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.markdown(
-    "<p style='text-align:right; color:gray; font-size:11px;'>Developed by <b>Subodh Purohit</b> | Last updated: 22 Dec 2025</p>",
+    "<p style='text-align:right; color:gray; font-size:11px;'>Developed by <b>Subodh Purohit</b> | Last updated: 01 Jan 2026</p>",
     unsafe_allow_html=True
 )
