@@ -293,7 +293,7 @@ st.markdown("""
 <div style='border:1px solid #ddd;padding:12px;border-radius:6px;background:#fff;font-size:12px;'>
 <b style='color:red;'>Grade mapping:</b> A=10 | A-=9 | B=8 | B-=7 | C=6 | C-=5 | D=4 | E=2<br>
 <b style='color:red;'>Pass criteria:</b> Min GP ≥ 4.5 | SGPA ≥ 5.5 | CGPA ≥ 5.5
-<b style='color:red;'>Legend:</b> EC1: Assignment/Quiz | EC2: Mid Semester Exam | EC3: Comprehensive Examination
+<b style='color:red;'>Legend:</b> EC1 = Assignment/Quiz | EC2 = Mid Semester Exam | EC3 = Comprehensive Examination
 </div>
 """, unsafe_allow_html=True)
 
