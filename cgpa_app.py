@@ -97,6 +97,7 @@ for sem_idx, tab in enumerate(tabs, start=1):
         # EDIT MODE: Only if this is the selected sem
         # ==========================================
         if sem_idx == current_sem:
+            # UPDATED: Removed pencil icon here
             st.header(f"Input: Semester {current_sem} Marks")
             
             courses_data = []
@@ -297,6 +298,6 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.markdown(
-    "<p style='text-align:right; color:gray; font-size:11px;'>Developed by <b>Subodh Purohit</b> | Last updated: 1 Jan 2026</p>",
+    "<p style='text-align:right; color:gray; font-size:11px;'>Developed by <b>Subodh Purohit</b> | Last updated: 22 Dec 2025</p>",
     unsafe_allow_html=True
 )
