@@ -288,6 +288,43 @@ if len(completed) >= 2:
 elif len(completed) > 0:
     st.info("CGPA will be available after completion of at least 2 semesters.")
 
+# =========================================================
+# Consolidated Summary Table (All Semesters)
+# =========================================================
+st.markdown("---")
+st.subheader("📑 Consolidated Academic Summary")
+
+completed = st.session_state.semester_results
+
+all_rows = []
+for s in sorted(completed.keys()):
+    sem_df = completed[s]["df"].copy()
+    sem_df.insert(0, "Semester", f"Sem {s}")
+    all_rows.append(sem_df)
+
+if all_rows:
+    full_df = pd.concat(all_rows, ignore_index=True)
+
+    # Display consolidated table
+    st.table(full_df.set_index(["Semester", "Course"]))
+
+    # =====================================================
+    # CSV Export
+    # =====================================================
+    csv = full_df.to_csv(index=False).encode("utf-8")
+
+    st.download_button(
+        label="📥 Download Consolidated Summary (CSV)",
+        data=csv,
+        file_name="academic_summary.csv",
+        mime="text/csv",
+    )
+else:
+    st.info("No semester results available yet.")
+# =========================================================
+# Footer
+# =========================================================
+
 st.markdown("---")
 st.markdown("""
 <div style='border:1px solid #ddd;padding:12px;border-radius:6px;background:#fff;font-size:12px;'>
