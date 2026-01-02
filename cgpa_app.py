@@ -319,7 +319,7 @@ elif len(completed) > 0:
     st.info("CGPA will be available after completion of at least 2 semesters.")
 
 # =========================================================
-# Consolidated Summary Table (UNCHANGED)
+# Consolidated Summary Table 
 # =========================================================
 st.markdown("---")
 st.subheader("📑 Consolidated Academic Summary")
@@ -332,7 +332,8 @@ for s in sorted(completed.keys()):
 
 if all_rows:
     full_df = pd.concat(all_rows, ignore_index=True)
-
+    indexed_full_df = full_df.set_index(["Semester", "Course"])
+    
     styled_full = (
         full_df
         .style
@@ -340,7 +341,7 @@ if all_rows:
         .applymap(style_result, subset=["Result"])
     )
 
-    st.dataframe(styled_full.set_index(["Semester", "Course"]), use_container_width=True)
+    st.dataframe(styled_full, use_container_width=True)
 
     csv = full_df.to_csv(index=False).encode("utf-8")
     st.download_button(
