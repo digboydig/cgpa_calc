@@ -319,10 +319,12 @@ elif len(completed) > 0:
     st.info("CGPA will be available after completion of at least 2 semesters.")
 
 # =========================================================
-# Consolidated Summary Table 
+# Consolidated Summary Table (All Semesters)
 # =========================================================
 st.markdown("---")
 st.subheader("📑 Consolidated Academic Summary")
+
+completed = st.session_state.semester_results
 
 all_rows = []
 for s in sorted(completed.keys()):
@@ -332,10 +334,12 @@ for s in sorted(completed.keys()):
 
 if all_rows:
     full_df = pd.concat(all_rows, ignore_index=True)
-    indexed_full_df = full_df.set_index(["Semester", "Course"])
-    
+
+    # ---- IMPORTANT: set index BEFORE styling ----
+    full_df_indexed = full_df.set_index(["Semester", "Course"])
+
     styled_full = (
-        full_df
+        full_df_indexed
         .style
         .applymap(style_grade, subset=["Grade"])
         .applymap(style_result, subset=["Result"])
@@ -343,7 +347,9 @@ if all_rows:
 
     st.dataframe(styled_full, use_container_width=True)
 
+    # CSV export must use the ORIGINAL DataFrame
     csv = full_df.to_csv(index=False).encode("utf-8")
+
     st.download_button(
         label="📥 Download Consolidated Summary (CSV)",
         data=csv,
@@ -354,7 +360,7 @@ else:
     st.info("No semester results available yet.")
 
 # =========================================================
-# FULL ORIGINAL FOOTER (PRESERVED)
+# FULL ORIGINAL FOOTER
 # =========================================================
 st.markdown("---")
 st.markdown("""
