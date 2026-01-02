@@ -7,14 +7,14 @@ st.set_page_config(page_title="🎓 SGPA / CGPA Calculator", layout="centered")
 # =========================================================
 # Helper functions
 # =========================================================
-def grade_point_and_letter_absolute(total):
-    if total >= 90: return 10, "A"
-    elif total >= 80: return 9, "A-"
-    elif total >= 70: return 8, "B"
-    elif total >= 60: return 7, "B-"
-    elif total >= 50: return 6, "C"
-    elif total >= 45: return 5, "C-"
-    elif total >= 35: return 4, "D"
+def grade_point_and_letter_absolute(total_percent):
+    if total_percent >= 90: return 10, "A"
+    elif total_percent >= 80: return 9, "A-"
+    elif total_percent >= 70: return 8, "B"
+    elif total_percent >= 60: return 7, "B-"
+    elif total_percent >= 50: return 6, "C"
+    elif total_percent >= 45: return 5, "C-"
+    elif total_percent >= 35: return 4, "D"
     else: return 2, "E"
 
 GP_TO_PERCENT = {10: 90, 9: 80, 8: 70, 7: 60, 6: 50, 5: 45, 4: 35, 2: 0}
@@ -59,7 +59,7 @@ with st.sidebar:
         value=4
     )
 
-    st.info("💡 Tip: Enter course names and marks directly in the table.")
+    st.info("💡 Tip: Enter EC marks out of their respective weights.")
 
     st.markdown("---")
     st.subheader("Weights")
@@ -109,7 +109,6 @@ for sem_idx, tab in enumerate(tabs, start=1):
 
             df_template = pd.DataFrame(default_data)
 
-            # ---- STREAMLIT CLOUD SAFE DROPDOWN ----
             df_template["Units"] = df_template["Units"].astype("category")
             df_template["Units"] = df_template["Units"].cat.set_categories([4, 5])
 
@@ -131,101 +130,88 @@ for sem_idx, tab in enumerate(tabs, start=1):
 
             try:
                 edited_df = st.data_editor(**editor_kwargs)
-            except AttributeError:
-                try:
-                    edited_df = st.experimental_data_editor(**editor_kwargs)
-                except Exception:
-                    del editor_kwargs["num_rows"]
-                    if hasattr(st, "experimental_data_editor"):
-                        edited_df = st.experimental_data_editor(**editor_kwargs)
-                    else:
-                        st.error("Streamlit version too old. Please upgrade.")
-                        st.stop()
-            except TypeError:
+            except Exception:
                 del editor_kwargs["num_rows"]
                 edited_df = st.data_editor(**editor_kwargs)
 
+            # =====================================================
+            # Grade Projection Tool
+            # =====================================================
             st.markdown("#### 🎯 Grade Projection Tool")
             with st.expander("Calculate required marks for a specific course"):
                 course_opts = edited_df["Course Name"].unique().tolist()
                 if course_opts:
                     selected_course = st.selectbox("Select Course", course_opts)
-                    subset = edited_df[edited_df["Course Name"] == selected_course]
+                    row = edited_df[edited_df["Course Name"] == selected_course].iloc[0]
 
-                    if not subset.empty:
-                        row = subset.iloc[0]
+                    if same_weights:
+                        p_w1, p_w2, p_w3 = gw1, gw2, gw3
+                    else:
+                        p_w1 = row.get("W1", 0)
+                        p_w2 = row.get("W2", 0)
+                        p_w3 = row.get("W3", 0)
 
-                        if same_weights:
-                            p_w1, p_w2, p_w3 = gw1, gw2, gw3
-                        else:
-                            p_w1 = row.get("W1", 30.0)
-                            p_w2 = row.get("W2", 30.0)
-                            p_w3 = row.get("W3", 40.0)
+                    p_h = row.get("Highest", 100.0) if calc_method == "Normalise from Class Highest" else 100.0
 
-                        p_h = row.get("Highest", 100.0) if calc_method == "Normalise from Class Highest" else 100.0
+                    p_ec1, p_ec2, p_ec3 = row.get("EC1"), row.get("EC2"), row.get("EC3")
 
-                        p_ec1 = row.get("EC1")
-                        p_ec2 = row.get("EC2")
-                        p_ec3 = row.get("EC3")
+                    current_raw = safe_sum(p_ec1, p_ec2, p_ec3)
 
-                        current_raw = safe_sum(p_ec1, p_ec2, p_ec3)
+                    target_gp = st.selectbox("Target GP", list(GP_TO_PERCENT.keys()), index=2)
+                    target_percent = GP_TO_PERCENT[target_gp]
+                    target_raw = (target_percent / 100) * p_h
 
-                        target_gp = st.selectbox("Target GP", list(GP_TO_PERCENT.keys()), index=2)
-                        target_percent = GP_TO_PERCENT[target_gp]
-                        target_raw = (target_percent / 100) * p_h
+                    need = target_raw - current_raw
 
-                        need = target_raw - current_raw
+                    pending_capacity = 0
+                    if pd.isna(p_ec1): pending_capacity += p_w1
+                    if pd.isna(p_ec2): pending_capacity += p_w2
+                    if pd.isna(p_ec3): pending_capacity += p_w3
 
-                        pending_capacity = 0
-                        if pd.isna(p_ec1): pending_capacity += p_w1
-                        if pd.isna(p_ec2): pending_capacity += p_w2
-                        if pd.isna(p_ec3): pending_capacity += p_w3
+                    col1, col2 = st.columns(2)
+                    col1.metric("Current Marks", f"{current_raw:.2f}")
+                    col2.metric("Required Marks", f"{target_raw:.2f}")
 
-                        col1, col2 = st.columns(2)
-                        col1.metric("Current Raw Score", f"{current_raw:.2f}")
-                        col2.metric("Required Raw Score", f"{target_raw:.2f}")
-
-                        if need <= 0:
-                            st.success(f"✅ Target {target_gp} already achieved!")
-                        elif need > pending_capacity:
-                            st.error(f"❌ Cannot reach {target_gp}.")
-                        else:
-                            st.info(f"You need **{need:.2f}** more marks.")
+                    if need <= 0:
+                        st.success(f"✅ Target GP {target_gp} already achieved!")
+                    elif need > pending_capacity:
+                        st.error(f"❌ Target GP {target_gp} not achievable.")
+                    else:
+                        st.info(f"You need **{need:.2f} marks** more.")
 
             st.divider()
 
+            # =====================================================
+            # Compute Semester Result
+            # =====================================================
             if st.button("Compute Semester Result", key=f"calc_{current_sem}"):
                 rows = []
                 total_gp = 0
                 total_units = 0
 
-                if same_weights and abs(gw1 + gw2 + gw3 - 100) > 1e-6:
-                    st.error("Global weights must sum to 100.")
-                    st.stop()
-
                 for _, row in edited_df.iterrows():
                     cname = row["Course Name"]
                     units = row["Units"] if pd.notna(row["Units"]) else 4
 
-                    if not same_weights:
-                        w1 = row.get("W1", 0) or 0
-                        w2 = row.get("W2", 0) or 0
-                        w3 = row.get("W3", 0) or 0
-                        if abs(w1 + w2 + w3 - 100) > 1e-6:
-                            st.error(f"Weights for '{cname}' must sum to 100.")
-                            st.stop()
+                    if same_weights:
+                        w1, w2, w3 = gw1, gw2, gw3
+                    else:
+                        w1, w2, w3 = row.get("W1", 0), row.get("W2", 0), row.get("W3", 0)
 
-                    ec1 = row.get("EC1", 0)
-                    ec2 = row.get("EC2", 0)
-                    ec3 = row.get("EC3", 0)
-                    raw = safe_sum(ec1, ec2, ec3)
+                    if abs(w1 + w2 + w3 - 100) > 1e-6:
+                        st.error(f"Weights for '{cname}' must sum to 100.")
+                        st.stop()
+
+                    ec1, ec2, ec3 = row.get("EC1", 0), row.get("EC2", 0), row.get("EC3", 0)
+                    absolute_total = safe_sum(ec1, ec2, ec3)
 
                     h_course = row.get("Highest", 100.0) if calc_method == "Normalise from Class Highest" else 100.0
-                    if pd.isna(h_course) or h_course <= 0:
+                    if h_course <= 0:
                         h_course = 100.0
 
-                    final = (raw / h_course) * 100
-                    gp, grade = grade_point_and_letter_absolute(final)
+                    normalised_percent = (absolute_total / h_course) * 100
+
+                    gp, grade = grade_point_and_letter_absolute(normalised_percent)
 
                     total_gp += gp * units
                     total_units += units
@@ -233,10 +219,11 @@ for sem_idx, tab in enumerate(tabs, start=1):
                     rows.append({
                         "Course": cname,
                         "Units": units,
-                        "Total (%)": f"{final:.2f}",
+                        "Total Marks (Absolute)": f"{absolute_total:.2f}",
+                        "Total % (Normalised)": f"{normalised_percent:.2f}",
                         "GP": gp,
                         "Grade": grade,
-                        "Result": "Pass" if gp >= 4.5 else "Fail"
+                        "Result": "Pass" if gp >= 5 else "Fail"
                     })
 
                 st.session_state.semester_results[current_sem] = {
@@ -273,11 +260,7 @@ if len(completed) >= 2:
         "SGPA": [completed[s]["sgpa"] for s in sorted(completed)]
     })
 
-    chart = alt.Chart(chart_data).mark_bar(
-        size=50,
-        cornerRadiusTopLeft=6,
-        cornerRadiusTopRight=6
-    ).encode(
+    chart = alt.Chart(chart_data).mark_bar(size=50).encode(
         x=alt.X("Semester", axis=alt.Axis(labelAngle=0)),
         y=alt.Y("SGPA", scale=alt.Scale(domain=[0, 10])),
         tooltip=["Semester", "SGPA"]
@@ -289,12 +272,10 @@ elif len(completed) > 0:
     st.info("CGPA will be available after completion of at least 2 semesters.")
 
 # =========================================================
-# Consolidated Summary Table (All Semesters)
+# Consolidated Summary
 # =========================================================
 st.markdown("---")
 st.subheader("📑 Consolidated Academic Summary")
-
-completed = st.session_state.semester_results
 
 all_rows = []
 for s in sorted(completed.keys()):
@@ -304,32 +285,21 @@ for s in sorted(completed.keys()):
 
 if all_rows:
     full_df = pd.concat(all_rows, ignore_index=True)
-
-    # Display consolidated table
     st.table(full_df.set_index(["Semester", "Course"]))
 
-    # =====================================================
-    # CSV Export
-    # =====================================================
     csv = full_df.to_csv(index=False).encode("utf-8")
-
-    st.download_button(
-        label="📥 Download Consolidated Summary (CSV)",
-        data=csv,
-        file_name="academic_summary.csv",
-        mime="text/csv",
-    )
+    st.download_button("📥 Download Consolidated Summary (CSV)", csv, "academic_summary.csv", "text/csv")
 else:
     st.info("No semester results available yet.")
+
 # =========================================================
 # Footer
 # =========================================================
-
 st.markdown("---")
 st.markdown("""
 <div style='border:1px solid #ddd;padding:12px;border-radius:6px;background:#fff;font-size:12px;'>
 <b style='color:red;'>Grade mapping:</b> A=10 | A-=9 | B=8 | B-=7 | C=6 | C-=5 | D=4 | E=2<br>
-<b style='color:red;'>Pass criteria:</b> Min GP ≥ 4.5 | SGPA ≥ 5.5 | CGPA ≥ 5.5<br>
+<b style='color:red;'>Pass criteria:</b> Min GP ≥ 5 | SGPA ≥ 5.5 | CGPA ≥ 5.5<br>
 <b style='color:red;'>Legend:</b> EC1 = Assignment/Quiz | EC2 = Mid Semester Exam | EC3 = Comprehensive Examination
 </div>
 """, unsafe_allow_html=True)
